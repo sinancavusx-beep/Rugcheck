@@ -1,5 +1,3 @@
-import asyncio
-import json
 import os
 import re
 from datetime import datetime
@@ -14,8 +12,8 @@ from blacklist import BlacklistManager
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 HELIUS_API_KEY = os.getenv("HELIUS_API_KEY")
 
-analyzer = TokenAnalyzer(HELIUS_API_KEY)
 blacklist = BlacklistManager()
+analyzer = None  # main() içinde başlatılacak
 
 SOLANA_CA_PATTERN = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
 
@@ -78,7 +76,6 @@ async def analyze_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result = await analyzer.analyze(ca)
 
-        # Kara liste kontrolü
         if blacklist.is_blacklisted(result.get("dev_wallet", "")):
             bl_data = blacklist.get(result["dev_wallet"])
             text = (
@@ -92,7 +89,6 @@ async def analyze_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.edit_text(text, parse_mode="Markdown")
             return
 
-        # Risk skoru hesapla
         score = result["risk_score"]
 
         if score <= 30:
@@ -105,7 +101,6 @@ async def analyze_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
             emoji = "🔴"
             risk_text = "YÜKSEK RİSK"
 
-        # Kara listeye ekle (2+ rug)
         if result.get("rug_count", 0) >= 2:
             blacklist.add(result["dev_wallet"], result["rug_count"])
             bl_note = "⛔ *Dev kara listeye eklendi!*\n"
@@ -149,6 +144,9 @@ def main():
         raise ValueError("TELEGRAM_BOT_TOKEN env variable eksik!")
     if not HELIUS_API_KEY:
         raise ValueError("HELIUS_API_KEY env variable eksik!")
+
+    global analyzer
+    analyzer = TokenAnalyzer(HELIUS_API_KEY)
 
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
